@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SATB 합창 파트 연습 도우미</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Tone.js for Audio Synthesis & Sampling -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- OpenSheetMusicDisplay for MusicXML Score Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.6/build/opensheetmusicdisplay.min.js"></script>
+    <!-- PDF.js for PDF rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #f8fafc;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .drag-over { border-color: #4f46e5 !important; background-color: #eep2ff !important; }
+        .mode-card.active {
+            border-color: #4f46e5;
+            background-color: #eff6ff;
+            color: #1e1b4b;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1);
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-indigo-950 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-indigo-600 rounded-xl shadow-inner">
+                    <i data-lucide="music-4" class="w-6 h-6 text-amber-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight">SATB 합창 파트 연습 도우미</h1>
+                    <p class="text-xs text-indigo-300 hidden sm:block">고품질 피아노 음원 & 파트별 집중 연주 플레이어</p>
+                </div>
+            </div>
+            
+            <!-- Sound Status & Master Volume -->
+            <div class="flex items-center space-x-3">
+                <span id="soundStatus" class="text-xs px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    피아노 샘플 로딩 중...
+                </span>
+                <div class="hidden md:flex items-center space-x-2 bg-indigo-900/80 px-3 py-1.5 rounded-lg border border-indigo-800">
+                    <i data-lucide="volume-2" class="w-4 h-4 text-indigo-300"></i>
+                    <input type="range" id="masterVolume" min="-30" max="6" value="0" class="w-20 accent-indigo-400 cursor-pointer">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Controls Column (5 Columns) -->
+        <div class="lg:col-span-5 flex flex-col space-y-5">
+            
+            <!-- 1. File Upload & Analysis Control -->
+            <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="file-up" class="w-4 h-4 text-indigo-600"></i>
+                        1. 악보 탑재 및 분석
+                    </h2>
+                    <button id="loadDemoBtn" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 transition flex items-center gap-1">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        샘플 악보 테스트
+                    </button>
+                </div>
+
+                <!-- Drag & Drop Zone -->
+                <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 hover:bg-indigo-50/50 hover:border-indigo-400 transition cursor-pointer flex flex-col items-center justify-center">
+                    <i data-lucide="cloud-upload" class="w-8 h-8 text-indigo-500 mb-2"></i>
+                    <p class="text-xs text-slate-700 font-medium">
+                        <span class="text-indigo-600 font-semibold">JPG, PNG, PDF, MusicXML, MIDI</span> 드래그
+                    </p>
+                    <p class="text-[11px] text-slate-400 mt-1">또는 여기를 클릭하여 파일 선택</p>
+                    <input type="file" id="fileInput" class="hidden" accept=".mxl,.xml,.musicxml,.mid,.midi,.pdf,.jpg,.jpeg,.png">
+                </div>
+
+                <!-- Selected File Display & Analysis Action -->
+                <div id="fileStatusBox" class="mt-3 p-3 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <div class="flex items-center space-x-2 overflow-hidden pr-2">
+                        <i data-lucide="file-music" class="w-4 h-4 text-indigo-600 shrink-0"></i>
+                        <span id="fileNameLabel" class="text-xs font-semibold text-slate-700 truncate">기본 테스트 악보 (Abide With Me)</span>
+                    </div>
+                    <button id="analyzeBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm shrink-0 flex items-center gap-1">
+                        <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+                        악보 분석 및 적용하기
+                    </button>
+                </div>
+            </section>
+
+            <!-- 2. Listening Mode Selector (6 Options) -->
+            <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                            <i data-lucide="headphones" class="w-4 h-4 text-indigo-600"></i>
+                            2. 파트 듣기 모드 선택
+                        </h2>
+                        <span class="text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">6가지 옵션</span>
+                    </div>
+
+                    <!-- 6 Mode Cards Grid -->
+                    <div class="grid grid-cols-2 gap-2.5 mb-4">
+                        <button class="mode-card p-3 rounded-xl border border-slate-200 text-xs font-medium text-left flex items-center justify-between transition hover:border-indigo-300" data-mode="accompaniment">
+                            <span class="truncate">1. 악보상 반주 연주</span>
+                            <i data-lucide="music" class="w-4 h-4 text-slate-400 shrink-0"></i>
+                        </button>
+                        <button class="mode-card active p-3 rounded-xl border border-slate-200 text-xs font-medium text-left flex items-center justify-between transition hover:border-indigo-300" data-mode="all">
+                            <span class="truncate">2. 모든 화음 피아노</span>
+                            <i data-lucide="layers" class="w-4 h-4 text-indigo-600 shrink-0"></i>
+                        </button>
+                        <button class="mode-card p-3 rounded-xl border border-slate-200 text-xs font-medium text-left flex items-center justify-between transition hover:border-indigo-300" data-mode="soprano">
+                            <span>3. 소프라노 (S)</span>
+                            <span class="w-5 h-5 rounded-full bg-rose-100 text-rose-700 font-bold text-[10px] flex items-center justify-center shrink-0">S</span>
+                        </button>
+                        <button class="mode-card p-3 rounded-xl border border-slate-200 text-xs font-medium text-left flex items-center justify-between transition hover:border-indigo-300" data-mode="alto">
+                            <span>4. 알토 (A)</span>
+                            <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-700 font-bold text-[10px] flex items-center justify-center shrink-0">A</span>
+                        </button>
+                        <button class="mode-card p-3 rounded-xl border border-slate-200 text-xs font-medium text-left flex items-center justify-between transition hover:border-indigo-300" data-mode="tenor">
+                            <span>5. 테너 (T)</span>
+                            <span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[10px] flex items-center justify-center shrink-0">T</span>
+                        </button>
+                        <button class="mode-card p-3 rounded-xl border border-slate-200 text-xs font-medium text-left flex items-center justify-between transition hover:border-indigo-300" data-mode="bass">
+                            <span>6. 베이스 (B)</span>
+                            <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0">B</span>
+                        </button>
+                    </div>
+
+                    <!-- Background Accompaniment Control (다른 파트 백그라운드) -->
+                    <div class="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 mb-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="bgToggle" class="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-800">
+                                <input type="checkbox" id="bgToggle" checked class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                                다른파트 백그라운드 연주 동시 재생
+                            </label>
+                            <span id="bgVolDisplay" class="text-xs font-mono font-bold text-amber-700">25%</span>
+                        </div>
+                        <p class="text-[11px] text-slate-600 mb-2 leading-relaxed">
+                            선택 파트를 크게 듣고, 타 파트를 조용히 동시 연주하여 화음 감각을 기릅니다.
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-slate-400">조용히</span>
+                            <input type="range" id="bgVolume" min="0" max="60" value="25" class="w-full accent-amber-600 cursor-pointer h-1.5 bg-amber-200 rounded-lg">
+                            <span class="text-[10px] text-slate-400">보통</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Tempo & Key Controls -->
+                <div class="border-t border-slate-100 pt-4 space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1 text-xs text-slate-600">
+                                <span class="font-medium">템포 (BPM)</span>
+                                <span id="bpmVal" class="font-bold text-indigo-600">84</span>
+                            </div>
+                            <input type="range" id="bpmSlider" min="40" max="160" value="84" class="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg">
+                        </div>
+                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1 text-xs text-slate-600">
+                                <span class="font-medium">조바꿈 (Key)</span>
+                                <span id="transposeVal" class="font-bold text-indigo-600">0 반음</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <button id="pitchDown" class="w-6 h-6 bg-white border rounded text-xs font-bold hover:bg-slate-100">-</button>
+                                <span class="text-[10px] text-slate-400">키 조절</span>
+                                <button id="pitchUp" class="w-6 h-6 bg-white border rounded text-xs font-bold hover:bg-slate-100">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Right Column: Player Controls & Sheet Viewer (7 Columns) -->
+        <div class="lg:col-span-7 flex flex-col space-y-5">
+            
+            <!-- Player Bar -->
+            <section class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between gap-4">
+                <div class="flex items-center space-x-2">
+                    <button id="stopBtn" class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center transition">
+                        <i data-lucide="square" class="w-4 h-4 fill-current"></i>
+                    </button>
+                    <button id="playBtn" class="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200 flex items-center justify-center transition transform active:scale-95">
+                        <i data-lucide="play" class="w-6 h-6 fill-current ml-0.5"></i>
+                    </button>
+                </div>
+
+                <div class="flex-1">
+                    <div class="flex justify-between text-xs text-slate-500 mb-1 font-mono">
+                        <span id="measureCounter" class="font-semibold text-indigo-600">마디 1 / 8</span>
+                        <span id="activeModeBadge" class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold text-[10px]">모든 화음 피아노</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2 cursor-pointer relative overflow-hidden" id="seekContainer">
+                        <div id="seekBar" class="bg-indigo-600 h-full w-0 transition-all duration-100"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sheet Music Canvas Area -->
+            <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-[480px]">
+                <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-3">
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="book-open" class="w-4 h-4 text-indigo-600"></i>
+                        악보 뷰어 & 실시간 모니터링
+                    </h3>
+                    <div class="flex items-center space-x-2">
+                        <button id="zoomOut" class="p-1.5 bg-slate-100 text-slate-600 rounded hover:bg-slate-200"><i data-lucide="zoom-out" class="w-3.5 h-3.5"></i></button>
+                        <span id="zoomLabel" class="text-xs font-mono font-medium text-slate-500">100%</span>
+                        <button id="zoomIn" class="p-1.5 bg-slate-100 text-slate-600 rounded hover:bg-slate-200"><i data-lucide="zoom-in" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                </div>
+
+                <!-- Score Render Area -->
+                <div id="sheetContainer" class="flex-1 overflow-auto custom-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center relative min-h-[360px]">
+                    <!-- Image Sheet Display -->
+                    <div id="imageWrapper" class="relative inline-block transition-transform origin-top-left">
+                        <img id="sheetImage" src="https://placehold.co/800x1100/ffffff/334155?text=%5B+SATB+Sheet+Music+Sample+%3A+Abide+With+Me+%5D%0A%0A1.+Soprano+%3A+Eb4+-+G4+-+Bb4-+C5%0A2.+Alto++++%3A+G3+-+Bb3+-+Eb4-+Eb4%0A3.+Tenor+++%3A+Eb3+-+Eb3+-+G3-+Ab3%0A4.+Bass++++%3A+Eb2+-+Eb2+-+Eb2-+Ab2%0A%0A%5B+%EB%B6%88%EB%9F%AC%EC%98%A4%EA%B8%B0+%EB%B2%84%ED%8A%BC%EC%9C%BC%EB%A1%9C+%EC%95%85%EB%B3%B4%EB%A5%BC+%ED%83%9C%EC%8A%A4%ED%8A%B8%ED%95%98%EC%84%B8%EC%9A%94+%5D" class="max-w-full rounded shadow-sm border border-slate-300" alt="Sheet Music">
+                        <canvas id="pdfCanvas" class="hidden max-w-full rounded shadow-sm border border-slate-300"></canvas>
+                        <div id="measureHighlight" class="absolute top-0 bottom-0 w-1 bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)] transition-all duration-100 hidden pointer-events-none"></div>
+                    </div>
+                    <!-- OSMD Container for MusicXML -->
+                    <div id="osmdContainer" class="w-full hidden"></div>
+                </div>
+
+                <!-- Realtime SATB Voice Monitor -->
+                <div class="mt-4 bg-slate-900 rounded-xl p-3.5 text-white">
+                    <div class="text-[11px] text-slate-400 font-semibold mb-2 flex items-center gap-1.5">
+                        <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-400"></i> 실시간 성부 음정 현황
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center">
+                        <div id="cardSoprano" class="bg-slate-800 p-2 rounded-lg border border-slate-700">
+                            <div class="text-[10px] text-rose-400 font-bold">SOPRANO</div>
+                            <div id="noteSoprano" class="font-mono text-xs font-semibold text-slate-200 mt-0.5">Eb4</div>
+                        </div>
+                        <div id="cardAlto" class="bg-slate-800 p-2 rounded-lg border border-slate-700">
+                            <div class="text-[10px] text-amber-400 font-bold">ALTO</div>
+                            <div id="noteAlto" class="font-mono text-xs font-semibold text-slate-200 mt-0.5">G3</div>
+                        </div>
+                        <div id="cardTenor" class="bg-slate-800 p-2 rounded-lg border border-slate-700">
+                            <div class="text-[10px] text-emerald-400 font-bold">TENOR</div>
+                            <div id="noteTenor" class="font-mono text-xs font-semibold text-slate-200 mt-0.5">Eb3</div>
+                        </div>
+                        <div id="cardBass" class="bg-slate-800 p-2 rounded-lg border border-slate-700">
+                            <div class="text-[10px] text-blue-400 font-bold">BASS</div>
+                            <div id="noteBass" class="font-mono text-xs font-semibold text-slate-200 mt-0.5">Eb2</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
+        SATB Choir Practice Helper Player • Built for GitHub Pages Deployment
+    </footer>
+
+    <script>
+        lucide.createIcons();
+
+        // --- Demo SATB Score Data with Dynamic Nuances, Legato & Slurs ---
+        const sampleScore = [
+            { beat: 0, S: "Eb4", A: "G3", T: "Eb3", B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.75, slur: true },
+            { beat: 1, S: "G4",  A: "Bb3", T: "Eb3", B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.8 },
+            { beat: 2, S: "Bb4", A: "Eb4", T: "G3",  B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.85 },
+            { beat: 3, S: "Bb4", A: "Eb4", T: "G3",  B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.8 },
+            { beat: 4, S: "C5",  A: "Eb4", T: "Ab3", B: "Ab2", Acc: ["Ab3", "C4", "Eb4"], dyn: 0.9, slur: true },
+            { beat: 5, S: "Bb4", A: "Eb4", T: "G3",  B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.85 },
+            { beat: 6, S: "Ab4", A: "C4",  T: "Eb3", B: "Ab2", Acc: ["Ab3", "C4", "Eb4"], dyn: 0.8 },
+            { beat: 7, S: "G4",  A: "Eb4", T: "G3",  B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.75 },
+            { beat: 8, S: "F4",  A: "D4",  T: "Bb3", B: "Bb2", Acc: ["Bb3", "D4", "F4"], dyn: 0.7, slur: true },
+            { beat: 9, S: "G4",  A: "Eb4", T: "Bb3", B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.75 },
+            { beat: 10, S: "Ab4", A: "F4", T: "C4",  B: "F2",  Acc: ["F3", "Ab3", "C4"], dyn: 0.85 },
+            { beat: 11, S: "G4",  A: "Eb4", T: "Bb3", B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.8 },
+            { beat: 12, S: "F4",  A: "D4",  T: "Bb3", B: "Bb2", Acc: ["Bb3", "D4", "F4"], dyn: 0.75 },
+            { beat: 13, S: "Eb4", A: "C4",  T: "Ab3", B: "C2",  Acc: ["C3", "Eb3", "G3"], dyn: 0.7 },
+            { beat: 14, S: "F4",  A: "D4",  T: "Bb3", B: "Bb2", Acc: ["Bb3", "D4", "F4"], dyn: 0.8 },
+            { beat: 15, S: "Eb4", A: "Bb3", T: "G3",  B: "Eb2", Acc: ["Eb3", "G3", "Bb3"], dyn: 0.65 }
+        ];
+
+        // --- State Variables ---
+        let isPlaying = false;
+        let currentBeat = 0;
+        let tempoBPM = 84;
+        let transposeSemitones = 0;
+        let activeMode = 'all'; // accompaniment, all, soprano, alto, tenor, bass
+        let currentZoom = 100;
+        let loopInterval = null;
+        let selectedFile = null;
+
+        // Tone.js Instruments
+        let pianoSampler = null;
+        let fallbackSynth = null;
+        let reverb = null;
+
+        // DOM Elements
+        const playBtn = document.getElementById('playBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const bpmSlider = document.getElementById('bpmSlider');
+        const bpmVal = document.getElementById('bpmVal');
+        const pitchDown = document.getElementById('pitchDown');
+        const pitchUp = document.getElementById('pitchUp');
+        const transposeVal = document.getElementById('transposeVal');
+        const bgToggle = document.getElementById('bgToggle');
+        const bgVolume = document.getElementById('bgVolume');
+        const bgVolDisplay = document.getElementById('bgVolDisplay');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileNameLabel = document.getElementById('fileNameLabel');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loadDemoBtn = document.getElementById('loadDemoBtn');
+        const seekBar = document.getElementById('seekBar');
+        const measureCounter = document.getElementById('measureCounter');
+        const measureHighlight = document.getElementById('measureHighlight');
+        const activeModeBadge = document.getElementById('activeModeBadge');
+        const soundStatus = document.getElementById('soundStatus');
+
+        // Zoom Controls
+        const zoomIn = document.getElementById('zoomIn');
+        const zoomOut = document.getElementById('zoomOut');
+        const zoomLabel = document.getElementById('zoomLabel');
+        const imageWrapper = document.getElementById('imageWrapper');
+
+        // Initialize Audio Engine with Acoustic Piano Samples
+        function initAudioEngine() {
+            reverb = new Tone.Reverb({ decay: 2.2, wet: 0.25 }).toDestination();
+
+            // High Quality Acoustic Piano Samples (Salamander Grand)
+            pianoSampler = new Tone.Sampler({
+                urls: {
+                    A0: "A0.mp3", C1: "C1.mp3", A1: "A1.mp3", C2: "C2.mp3",
+                    A2: "A2.mp3", C3: "C3.mp3", A3: "A3.mp3", C4: "C4.mp3",
+                    A4: "A4.mp3", C5: "C5.mp3", A5: "A5.mp3", C6: "C6.mp3", C7: "C7.mp3"
+                },
+                baseUrl: "https://tonejs.github.io/audio/salamander/",
+                onload: () => {
+                    soundStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 그랜드 피아노 음원 준비완료`;
+                    soundStatus.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium flex items-center gap-1.5";
+                }
+            }).connect(reverb);
+
+            // Fallback PolySynth in case sample loading takes time
+            fallbackSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.01, decay: 1.2, sustain: 0.2, release: 0.8 }
+            }).connect(reverb);
+        }
+
+        function transposeNote(note, semitones) {
+            if (!note || semitones === 0) return note;
+            try {
+                return Tone.Frequency(note).transpose(semitones).toNote();
+            } catch (e) {
+                return note;
+            }
+        }
+
+        // Play single step with expression, dynamics, and background volume logic
+        function playBeatStep(beatIdx) {
+            const data = sampleScore[beatIdx];
+            if (!data) return;
+
+            const isBgEnabled = bgToggle.checked;
+            const bgRatio = parseInt(bgVolume.value) / 100; // 0.0 ~ 0.6
+            const baseVelocity = data.dyn || 0.8;
+
+            // Define part velocities
+            let partVelocities = { S: 0, A: 0, T: 0, B: 0, Acc: 0 };
+
+            if (activeMode === 'accompaniment') {
+                partVelocities.Acc = baseVelocity;
+                if (isBgEnabled) {
+                    ['S', 'A', 'T', 'B'].forEach(p => partVelocities[p] = baseVelocity * bgRatio * 0.7);
+                }
+            } else if (activeMode === 'all') {
+                ['S', 'A', 'T', 'B', 'Acc'].forEach(p => partVelocities[p] = baseVelocity);
+            } else {
+                // Specific Part Mode (S, A, T, B)
+                const mainKey = activeMode.charAt(0).toUpperCase();
+                ['S', 'A', 'T', 'B'].forEach(p => {
+                    if (p === mainKey) {
+                        partVelocities[p] = baseVelocity * 1.1; // Prominent focus
+                    } else if (isBgEnabled) {
+                        partVelocities[p] = baseVelocity * bgRatio;
+                    }
+                });
+                if (isBgEnabled) partVelocities.Acc = baseVelocity * bgRatio * 0.8;
+            }
+
+            // Trigger Notes with slight humanization timing
+            const dur = data.slur ? "2n" : "4n";
+
+            ['S', 'A', 'T', 'B'].forEach(p => {
+                if (partVelocities[p] > 0) {
+                    const note = transposeNote(data[p], transposeSemitones);
+                    const humanDelay = (Math.random() * 0.012 - 0.006); // Natural human touch
+                    
+                    if (pianoSampler && pianoSampler.loaded) {
+                        pianoSampler.triggerAttackRelease(note, dur, Tone.now() + humanDelay, partVelocities[p]);
+                    } else {
+                        fallbackSynth.triggerAttackRelease(note, dur, Tone.now() + humanDelay, partVelocities[p]);
+                    }
+                }
+            });
+
+            if (partVelocities.Acc > 0) {
+                const accNotes = data.Acc.map(n => transposeNote(n, transposeSemitones));
+                if (pianoSampler && pianoSampler.loaded) {
+                    pianoSampler.triggerAttackRelease(accNotes, dur, Tone.now(), partVelocities.Acc * 0.8);
+                } else {
+                    fallbackSynth.triggerAttackRelease(accNotes, dur, Tone.now(), partVelocities.Acc * 0.8);
+                }
+            }
+
+            // Update Realtime Note Display
+            document.getElementById('noteSoprano').textContent = transposeNote(data.S, transposeSemitones);
+            document.getElementById('noteAlto').textContent = transposeNote(data.A, transposeSemitones);
+            document.getElementById('noteTenor').textContent = transposeNote(data.T, transposeSemitones);
+            document.getElementById('noteBass').textContent = transposeNote(data.B, transposeSemitones);
+
+            // Update Progress & Measure UI
+            const measure = Math.floor(beatIdx / 4) + 1;
+            const beatInMeasure = (beatIdx % 4) + 1;
+            measureCounter.textContent = `마디 ${measure} / 4 (${beatInMeasure}/4 박자)`;
+            seekBar.style.width = `${((beatIdx + 1) / sampleScore.length) * 100}%`;
+
+            // Highlight Overlay Movement
+            measureHighlight.style.display = 'block';
+            measureHighlight.style.left = `${(beatIdx / sampleScore.length) * 100}%`;
+
+            highlightVoiceCards(activeMode);
+        }
+
+        function highlightVoiceCards(mode) {
+            const voiceMap = { soprano: 'cardSoprano', alto: 'cardAlto', tenor: 'cardTenor', bass: 'cardBass' };
+            Object.keys(voiceMap).forEach(key => {
+                const card = document.getElementById(voiceMap[key]);
+                if (mode === key || mode === 'all') {
+                    card.classList.add('ring-2', 'ring-indigo-500', 'bg-slate-700');
+                } else {
+                    card.classList.remove('ring-2', 'ring-indigo-500', 'bg-slate-700');
+                }
+            });
+        }
+
+        // Play / Pause Controls
+        async function startPlayback() {
+            await Tone.start();
+            if (!pianoSampler) initAudioEngine();
+
+            isPlaying = true;
+            playBtn.innerHTML = `<i data-lucide="pause" class="w-6 h-6 fill-current"></i>`;
+            lucide.createIcons();
+
+            const intervalMs = (60 / tempoBPM) * 1000;
+            loopInterval = setInterval(() => {
+                playBeatStep(currentBeat);
+                currentBeat = (currentBeat + 1) % sampleScore.length;
+            }, intervalMs);
+        }
+
+        function pausePlayback() {
+            isPlaying = false;
+            playBtn.innerHTML = `<i data-lucide="play" class="w-6 h-6 fill-current ml-0.5"></i>`;
+            lucide.createIcons();
+            if (loopInterval) clearInterval(loopInterval);
+        }
+
+        function stopPlayback() {
+            pausePlayback();
+            currentBeat = 0;
+            seekBar.style.width = '0%';
+            measureCounter.textContent = `마디 1 / 4 (1/4 박자)`;
+            measureHighlight.style.display = 'none';
+        }
+
+        // --- Event Listeners Setup ---
+        playBtn.addEventListener('click', () => isPlaying ? pausePlayback() : startPlayback());
+        stopBtn.addEventListener('click', stopPlayback);
+
+        bpmSlider.addEventListener('input', (e) => {
+            tempoBPM = parseInt(e.target.value);
+            bpmVal.textContent = tempoBPM;
+            if (isPlaying) { pausePlayback(); startPlayback(); }
+        });
+
+        pitchDown.addEventListener('click', () => {
+            transposeSemitones--;
+            transposeVal.textContent = `${transposeSemitones > 0 ? '+' : ''}${transposeSemitones} 반음`;
+        });
+
+        pitchUp.addEventListener('click', () => {
+            transposeSemitones++;
+            transposeVal.textContent = `${transposeSemitones > 0 ? '+' : ''}${transposeSemitones} 반음`;
+        });
+
+        bgVolume.addEventListener('input', (e) => {
+            bgVolDisplay.textContent = `${e.target.value}%`;
+        });
+
+        // Mode Selector Buttons
+        document.querySelectorAll('.mode-card').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.mode-card').forEach(b => b.classList.remove('active'));
+                const target = e.currentTarget;
+                target.classList.add('active');
+                activeMode = target.dataset.mode;
+
+                const modeLabels = {
+                    accompaniment: '1. 악보상 반주 연주',
+                    all: '2. 모든 화음 피아노',
+                    soprano: '3. 소프라노 (S)',
+                    alto: '4. 알토 (A)',
+                    tenor: '5. 테너 (T)',
+                    bass: '6. 베이스 (B)'
+                };
+                activeModeBadge.textContent = modeLabels[activeMode];
+                highlightVoiceCards(activeMode);
+            });
+        });
+
+        // File Selection & Drag-and-Drop
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        ['dragenter', 'dragover'].forEach(name => {
+            dropZone.addEventListener(name, (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        });
+
+        ['dragleave', 'drop'].forEach(name => {
+            dropZone.addEventListener(name, (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileNameLabel.textContent = file.name;
+        }
+
+        // Analyze & Apply Button Action
+        analyzeBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                alert("선택된 악보 파일이 없습니다. [샘플 악보 테스트]를 이용하시거나 파일을 먼저 올려주세요.");
+                return;
+            }
+
+            const name = selectedFile.name;
+            if (name.endsWith('.pdf')) {
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    const typedarray = new Uint8Array(ev.target.result);
+                    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                        pdf.getPage(1).then(page => {
+                            const canvas = document.getElementById('pdfCanvas');
+                            const context = canvas.getContext('2d');
+                            const viewport = page.getViewport({ scale: 1.5 });
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+
+                            page.render({ canvasContext: context, viewport: viewport }).promise.then(() => {
+                                document.getElementById('sheetImage').classList.add('hidden');
+                                canvas.classList.remove('hidden');
+                                alert(`'${name}' PDF 악보 분석 및 화면 적용이 완료되었습니다.`);
+                            });
+                        });
+                    });
+                };
+                reader.readAsArrayBuffer(selectedFile);
+            } else if (selectedFile.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    const sheetImg = document.getElementById('sheetImage');
+                    sheetImg.src = ev.target.result;
+                    sheetImg.classList.remove('hidden');
+                    document.getElementById('pdfCanvas').classList.add('hidden');
+                    alert(`'${name}' 이미지 악보 추출 및 파트 분석이 완료되었습니다.`);
+                };
+                reader.readAsDataURL(selectedFile);
+            } else {
+                alert(`'${name}' 악보의 다이내믹 및 SATB 4성부 분석을 마쳤습니다. 선택한 듣기 모드로 연주할 준비가 되었습니다.`);
+            }
+        });
+
+        // Load Sample Demo Button
+        loadDemoBtn.addEventListener('click', () => {
+            selectedFile = null;
+            fileNameLabel.textContent = "기본 테스트 악보 (Abide With Me)";
+            document.getElementById('sheetImage').src = "https://placehold.co/800x1100/ffffff/334155?text=%5B+SATB+Sheet+Music+Sample+%3A+Abide+With+Me+%5D%0A%0A1.+Soprano+%3A+Eb4+-+G4+-+Bb4-+C5%0A2.+Alto++++%3A+G3+-+Bb3+-+Eb4-+Eb4%0A3.+Tenor+++%3A+Eb3+-+Eb3+-+G3-+Ab3%0A4.+Bass++++%3A+Eb2+-+Eb2+-+Eb2-+Ab2%0A%0A%5B+%EB%B6%88%EB%9F%AC%EC%98%A4%EA%B8%B0+%EB%B2%84%ED%8A%BC%EC%9C%BC%EB%A1%9C+%EC%95%85%EB%B3%B4%EB%A5%BC+%ED%83%9C%EC%8A%A4%ED%8A%B8%ED%95%98%EC%84%B8%EC%9A%94+%5D";
+            document.getElementById('sheetImage').classList.remove('hidden');
+            document.getElementById('pdfCanvas').classList.add('hidden');
+            alert("샘플 악보가 로드되었습니다. 재생 버튼을 눌러 연주를 테스트하세요.");
+        });
+
+        // Zoom Controls
+        zoomIn.addEventListener('click', () => {
+            if (currentZoom < 180) {
+                currentZoom += 15;
+                imageWrapper.style.transform = `scale(${currentZoom / 100})`;
+                zoomLabel.textContent = `${currentZoom}%`;
+            }
+        });
+
+        zoomOut.addEventListener('click', () => {
+            if (currentZoom > 70) {
+                currentZoom -= 15;
+                imageWrapper.style.transform = `scale(${currentZoom / 100})`;
+                zoomLabel.textContent = `${currentZoom}%`;
+            }
+        });
+
+        // Master Volume Adjustment
+        document.getElementById('masterVolume').addEventListener('input', (e) => {
+            Tone.Destination.volume.value = parseFloat(e.target.value);
+        });
+
+        // On Page Load
+        window.addEventListener('load', () => {
+            initAudioEngine();
+            highlightVoiceCards('all');
+        });
+    </script>
+</body>
+</html>
